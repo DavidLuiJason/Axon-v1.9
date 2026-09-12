@@ -32,21 +32,27 @@ import { ModelSelectorModal } from './ModelSelectorModal';
 import { ChatShortcutBar } from './ChatShortcutBar';
 import { isAccountInCooldown, getRemainingCooldownString } from '../lib/aiConfig';
 import { resolveMessageButtonColor, getContrastRatio } from '../lib/colorContrast';
+import { normalizeMarkdown, stripMarkdown } from '../lib/markdownUtils';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 
 const ChatMarkdown: React.FC<{ content: string; isAxon: boolean }> = React.memo(({ content, isAxon }) => {
+  const normalized = React.useMemo(() => normalizeMarkdown(content), [content]);
+
   return (
     <div className={`chat-markdown break-words text-sm leading-relaxed ${isAxon ? 'text-neutral-100' : 'text-neutral-950'}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkBreaks]}
+        remarkPlugins={[remarkBreaks, remarkGfm]}
         components={{
           p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
           strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
           em: ({ children }) => <em className="italic">{children}</em>,
+          del: ({ children }) => <del className="line-through opacity-75">{children}</del>,
           h1: ({ children }) => <h1 className="text-base font-bold mb-1.5 mt-2.5 first:mt-0 leading-snug">{children}</h1>,
           h2: ({ children }) => <h2 className="text-sm font-bold mb-1 mt-2 first:mt-0 leading-snug">{children}</h2>,
-          h3: ({ children }) => <h3 className="text-xs font-bold mb-1 mt-1.5 first:mt-0 tracking-wide uppercase">{children}</h3>,
+          h3: ({ children }) => <h3 className="text-xs font-bold mb-1 mt-1.5 first:mt-0 tracking-wide uppercase opacity-90">{children}</h3>,
+          h4: ({ children }) => <h4 className="text-xs font-bold mb-1 mt-1 first:mt-0">{children}</h4>,
           ul: ({ children }) => <ul className="list-disc list-outside pl-4 mb-2 last:mb-0 space-y-1">{children}</ul>,
           ol: ({ children }) => <ol className="list-decimal list-outside pl-4 mb-2 last:mb-0 space-y-1">{children}</ol>,
           li: ({ children }) => <li className="leading-relaxed pl-0.5">{children}</li>,
@@ -97,9 +103,29 @@ const ChatMarkdown: React.FC<{ content: string; isAxon: boolean }> = React.memo(
           hr: () => (
             <hr className={`my-2 border-t ${isAxon ? 'border-neutral-800' : 'border-neutral-200'}`} />
           ),
+          table: ({ children }) => (
+            <div className={`my-2 overflow-x-auto rounded-lg border text-xs ${
+              isAxon ? 'border-neutral-800 bg-neutral-950/60' : 'border-neutral-200 bg-white/60'
+            }`}>
+              <table className="w-full text-left border-collapse">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => (
+            <thead className={isAxon ? 'bg-neutral-900/80 border-b border-neutral-800' : 'bg-neutral-100 border-b border-neutral-200'}>
+              {children}
+            </thead>
+          ),
+          tbody: ({ children }) => <tbody>{children}</tbody>,
+          tr: ({ children }) => (
+            <tr className={isAxon ? 'border-b border-neutral-800 last:border-b-0' : 'border-b border-neutral-200 last:border-b-0'}>
+              {children}
+            </tr>
+          ),
+          th: ({ children }) => <th className="px-3 py-1.5 font-semibold text-xs">{children}</th>,
+          td: ({ children }) => <td className="px-3 py-1.5 text-xs">{children}</td>,
         }}
       >
-        {content}
+        {normalized}
       </ReactMarkdown>
     </div>
   );
@@ -385,7 +411,8 @@ export const ChatPane: React.FC = () => {
 
   const handleCopyText = async (msgId: string, text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      const cleanText = stripMarkdown(text);
+      await navigator.clipboard.writeText(cleanText);
       setCopiedMessageId(msgId);
       showToast('Copied message to clipboard');
       setTimeout(() => setCopiedMessageId(null), 2000);
@@ -396,9 +423,10 @@ export const ChatPane: React.FC = () => {
 
   const handleShareMessage = async (msgId: string, text: string, isAi: boolean) => {
     const senderLabel = isAi ? 'AXON' : 'User';
+    const cleanText = stripMarkdown(text);
     const shareData = {
       title: `${senderLabel} message from AXON`,
-      text: text,
+      text: cleanText,
     };
 
     if (navigator.share && typeof navigator.share === 'function') {
@@ -414,7 +442,7 @@ export const ChatPane: React.FC = () => {
     }
 
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(cleanText);
       setSharedMessageId(msgId);
       showToast('Message copied to clipboard to share');
       setTimeout(() => setSharedMessageId(null), 2000);
@@ -592,7 +620,7 @@ export const ChatPane: React.FC = () => {
                       onClick={() => {
                         closePanel();
                         const transcript = activeProjectMessages
-                          .map((m) => `${m.sender === 'user' ? 'User' : 'AXON'}: ${m.text}`)
+                          .map((m) => `${m.sender === 'user' ? 'User' : 'AXON'}: ${stripMarkdown(m.text)}`)
                           .join('\n\n');
                         navigator.clipboard.writeText(transcript);
                         showToast('Copied conversation to clipboard');

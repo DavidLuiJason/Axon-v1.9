@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { ChatMessage } from '../types';
+import { stripMarkdown } from './markdownUtils';
 
 export function exportChatToPdf(
   messages: ChatMessage[],
@@ -62,7 +63,8 @@ export function exportChatToPdf(
     // Split body into wrapped lines
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    const bodyLines = doc.splitTextToSize(msg.text, contentWidth - 24);
+    const cleanText = stripMarkdown(msg.text);
+    const bodyLines = doc.splitTextToSize(cleanText, contentWidth - 24);
     const boxHeight = bodyLines.length * 13 + 28;
 
     // Check if box fits on current page
@@ -267,7 +269,8 @@ export async function exportChatToImagePdf(
           : JSON.stringify(msg.text || ''));
 
     const maxTextWidth = MAX_BUBBLE_WIDTH - BUBBLE_PADDING_X * 2;
-    const wrappedLines = wrapCanvasText(mCtx, rawText, maxTextWidth);
+    const cleanText = stripMarkdown(rawText);
+    const wrappedLines = wrapCanvasText(mCtx, cleanText, maxTextWidth);
 
     // Calculate required bubble width
     let maxLineWidth = 0;

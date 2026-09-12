@@ -1,4 +1,5 @@
 import { ChatMessage, NoteItem, ProjectItem } from '../types';
+import { stripMarkdown } from './markdownUtils';
 
 export const DEFAULT_PROJECTS: ProjectItem[] = [
   {
@@ -102,7 +103,7 @@ export function formatConversationAsPlainText(
   for (const msg of messages) {
     const sender = msg.sender === 'user' ? 'USER' : 'AXON';
     text += `[${msg.timestamp || ''}] ${sender}:\n`;
-    text += `${msg.text}\n\n`;
+    text += `${stripMarkdown(msg.text)}\n\n`;
   }
 
   return text;
@@ -113,14 +114,19 @@ export function formatConversationAsJson(
   projectName: string,
   projectId: string
 ): string {
+  const cleanMessages = messages.map((m) => ({
+    ...m,
+    text: stripMarkdown(m.text),
+  }));
+
   return JSON.stringify(
     {
       exportVersion: '1.0',
       exportedAt: new Date().toISOString(),
       projectId,
       projectName,
-      totalMessages: messages.length,
-      messages,
+      totalMessages: cleanMessages.length,
+      messages: cleanMessages,
     },
     null,
     2
