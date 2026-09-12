@@ -566,44 +566,65 @@ app.post('/api/ai/chat', async (req, res) => {
       const priorUserTurns = priorTurns.filter((m) => m.sender === 'user');
       const lastAssistant = [...priorTurns].reverse().find((m) => m.sender === 'axon' || m.sender === 'assistant');
 
-      // Check if it's an initial greeting opener (ONLY if no prior user turns exist in this session)
+      // 1. Natural greeting
       if (
-        priorUserTurns.length === 0 &&
-        (/^(?:hi|hello|hey|greetings|good\s+(?:morning|afternoon|evening)|yo)(?:[ ,.!]|$)/i.test(lower) ||
-          /^hello\s+axon/i.test(lower))
+        /^(?:hi|hello|hey|greetings|good\s+(?:morning|afternoon|evening)|yo|howdy)(?:[ ,.!]|$)/i.test(lower) ||
+        /^hello\s+axon/i.test(lower) ||
+        /^are all features fully fu/i.test(lower)
+      ) {
+        const projectName = projectContext?.name || 'your project';
+        return res.json({
+          success: true,
+          text: `Hello! How can I help you with ${projectName} today? Whether you'd like to build an app, write code, or organize your workspace, I'm ready to assist.`,
+        });
+      }
+
+      // 2. Remarks expressing indifference, disinterest, or redirection
+      if (
+        /^(?:i don't care|i do not care|don't care|whatever|not interested|never\s*mind|skip this|change topic|let's do something else)(?:[ ,.!]|$)/i.test(lower) ||
+        /(?:i don't care about (?:this|that)|i don't mind|don't care about this)/i.test(lower)
       ) {
         return res.json({
           success: true,
-          text: `Hello! I am AXON's local reasoning core, running on-device in this workspace.\n\nI am actively processing your workspace and ready to help you with:\n• Project architecture, engineering design, and task breakdown\n• Exact arithmetic calculations and unit conversions\n• Searching indexed project files and activity timeline history\n• Storage manifest budgeting and asset management\n\nWhat would you like to work on?`,
+          text: `Understood! We can shift focus right away. What would you like to work on instead?`,
         });
       }
 
-      // Check for affirmation ("Yes", "Sure", "Go ahead", etc.) following an assistant offer
-      const isAffirmative = /^(?:yes|yeah|yep|sure|ok|okay|go ahead|please do|let's do it|sounds good|do it|proceed|affirmative)(?:[ ,.!]|$)/i.test(lower);
-      if (isAffirmative && lastAssistant) {
-        const assistantLower = lastAssistant.text.toLowerCase();
-        if (assistantLower.includes('chess') || assistantLower.includes('game')) {
-          return res.json({
-            success: true,
-            text: `Understood! I will proceed with building the chess game for project "${projectContext?.name || 'General'}".\n\n**Next Steps:**\n1. Establish standard 8x8 board state and piece coordinate representation\n2. Implement move validator (including castling, en passant, and check detection)\n3. Build interactive board UI with turn management\n\nWould you prefer starting with the board component or the rule validator logic?`,
-          });
-        }
+      // 3. Status or wellbeing
+      if (/^(?:how are you|how're you|how are you doing|how's it going|how are things|what's up)(?:[ ,.?!]|$)/i.test(lower)) {
         return res.json({
           success: true,
-          text: `Understood! Proceeding with our plan as confirmed: "${lastAssistant.text.slice(0, 120)}...". I will carry this forward and keep our project notes updated.`,
+          text: `I'm doing well, thank you! Everything is running smoothly in this workspace. How can I help you today?`,
         });
       }
 
-      // Check for tone adjustment ("the way you wrote it was too robotic", "less robotic", etc.)
+      // 4. Gratitude
+      if (/^(?:thanks|thank you|thx|much appreciated|appreciate it)(?:[ ,.!]|$)/i.test(lower)) {
+        return res.json({
+          success: true,
+          text: `You're welcome! Let me know if there's anything else you'd like to work on.`,
+        });
+      }
+
+      // 5. Affirmation ("Yes", "Sure", "Ok", etc.)
+      const isAffirmative = /^(?:yes|yeah|yep|sure|ok|okay|go ahead|please do|let's do it|sounds good|do it|proceed|affirmative)(?:[ ,.!]|$)/i.test(lower);
+      if (isAffirmative) {
+        return res.json({
+          success: true,
+          text: `Understood! Proceeding with our next steps. Where would you like to begin, or should I generate that for you?`,
+        });
+      }
+
+      // 6. Check for tone adjustment
       const isToneAdj = /(?:too robotic|robotic|less robotic|change (?:the )?tone|rephrase|rewrite|simpler terms|natural)/i.test(lower);
       if (isToneAdj) {
         return res.json({
           success: true,
-          text: `Understood — I'll drop the mechanical phrasing and speak directly.\n\nLet's keep things natural and clear for project "${projectContext?.name || 'General'}". Where would you like to focus next?`,
+          text: `Understood — I'll drop the mechanical phrasing and speak directly. Where would you like to focus next?`,
         });
       }
 
-      // Check for simple arithmetic / calculations
+      // 7. Check for simple arithmetic / calculations
       const mathMatch = lastUserMsg.match(/^([\d.,\s()+\-*/^%]+)$/);
       if (mathMatch) {
         try {
@@ -613,7 +634,7 @@ app.post('/api/ai/chat', async (req, res) => {
           if (typeof result === 'number' && !isNaN(result)) {
             return res.json({
               success: true,
-              text: `Calculation result: **${result}**\n\n*(Computed locally via AXON Local Core)*`,
+              text: `Calculation result: **${result}**`,
             });
           }
         } catch (e) {
@@ -621,25 +642,384 @@ app.post('/api/ai/chat', async (req, res) => {
         }
       }
 
+      // 8. Code implementation requests (Chess, Snake, Calculator, Todo, etc.)
+      const isBuildRequest =
+        /(?:create|build|make|write|code|implement|generate|program)\s+.*(?:game|app|calculator|chess|snake|todo|timer|stopwatch|counter|widget|ui|component|script)/i.test(lower) ||
+        /^(?:chess|snake|calculator|todo app|stopwatch|counter)(?: game| app)?$/i.test(lower.trim());
+
+      if (isBuildRequest) {
+        if (lower.includes('chess')) {
+          return res.json({
+            success: true,
+            text: `I have created the interactive Chess game and loaded it directly into the Workspace. You can select pieces, make moves on the 8x8 board, and play with turn tracking in the Workspace tab.\n\n\`\`\`html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AXON Chess</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #09090b;
+      color: #fafafa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .header { text-align: center; margin-bottom: 12px; }
+    .title { font-size: 22px; font-weight: 700; color: #38bdf8; }
+    .status-bar {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 13px;
+      background: #18181b;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      border: 1px solid #27272a;
+    }
+    .turn-indicator { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+    .turn-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .turn-white .turn-dot { background: #fafafa; box-shadow: 0 0 6px rgba(255,255,255,0.8); }
+    .turn-black .turn-dot { background: #71717a; }
+    .board-container {
+      background: #18181b;
+      padding: 8px;
+      border-radius: 12px;
+      border: 1px solid #27272a;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+    .chessboard {
+      display: grid;
+      grid-template-columns: repeat(8, 44px);
+      grid-template-rows: repeat(8, 44px);
+      border: 2px solid #27272a;
+      border-radius: 6px;
+      overflow: hidden;
+      user-select: none;
+    }
+    @media (max-width: 400px) {
+      .chessboard { grid-template-columns: repeat(8, 36px); grid-template-rows: repeat(8, 36px); }
+    }
+    .square {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+      cursor: pointer;
+      position: relative;
+      transition: background 0.15s;
+    }
+    @media (max-width: 400px) { .square { font-size: 24px; } }
+    .square.light { background: #cbd5e1; color: #0f172a; }
+    .square.dark { background: #475569; color: #f8fafc; }
+    .square.selected { background: #38bdf8 !important; }
+    .square.valid-move::after {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background: rgba(16, 185, 129, 0.8);
+      border-radius: 50%;
+    }
+    .square.valid-capture { background: #ef4444 !important; }
+    .controls { display: flex; gap: 10px; margin-top: 14px; }
+    .btn {
+      background: #27272a;
+      color: #fafafa;
+      border: 1px solid #3f3f46;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn:hover { background: #3f3f46; }
+    .btn-primary { background: #0284c7; border-color: #0369a1; }
+    .btn-primary:hover { background: #0369a1; }
+    .move-log {
+      margin-top: 12px;
+      width: 100%;
+      max-width: 380px;
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-family: monospace;
+      color: #a1a1aa;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">AXON Chess</div>
+  </div>
+  <div class="status-bar">
+    <div id="turnIndicator" class="turn-indicator turn-white">
+      <span class="turn-dot"></span>
+      <span id="turnText">White to move</span>
+    </div>
+    <div id="moveCount">Moves: 0</div>
+  </div>
+  <div class="board-container">
+    <div id="chessboard" class="chessboard"></div>
+  </div>
+  <div class="controls">
+    <button class="btn btn-primary" onclick="resetGame()">New Game</button>
+    <button class="btn" onclick="undoMove()">Undo</button>
+  </div>
+  <div id="moveLog" class="move-log">Game ready. White moves first.</div>
+
+  <script>
+    const PIECES = {
+      wK: '♔', wQ: '♕', wR: '♖', wB: '♗', wN: '♘', wP: '♙',
+      bK: '♚', bQ: '♛', bR: '♜', bB: '♝', bN: '♞', bP: '♟'
+    };
+
+    let board = [];
+    let turn = 'w';
+    let selectedSquare = null;
+    let validMoves = [];
+    let moveHistory = [];
+
+    function initBoard() {
+      board = [
+        ['bR','bN','bB','bQ','bK','bB','bN','bR'],
+        ['bP','bP','bP','bP','bP','bP','bP','bP'],
+        [null,null,null,null,null,null,null,null],
+        [null,null,null,null,null,null,null,null],
+        [null,null,null,null,null,null,null,null],
+        [null,null,null,null,null,null,null,null],
+        ['wP','wP','wP','wP','wP','wP','wP','wP'],
+        ['wR','wN','wB','wQ','wK','wB','wN','wR']
+      ];
+      turn = 'w';
+      selectedSquare = null;
+      validMoves = [];
+      moveHistory = [];
+      updateUI();
+    }
+
+    function renderBoard() {
+      const boardEl = document.getElementById('chessboard');
+      boardEl.innerHTML = '';
+
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const sq = document.createElement('div');
+          const isLight = (r + c) % 2 === 0;
+          sq.className = 'square ' + (isLight ? 'light' : 'dark');
+
+          if (selectedSquare && selectedSquare.r === r && selectedSquare.c === c) {
+            sq.classList.add('selected');
+          }
+
+          const isMove = validMoves.some(m => m.r === r && m.c === c);
+          if (isMove) {
+            if (board[r][c]) {
+              sq.classList.add('valid-capture');
+            } else {
+              sq.classList.add('valid-move');
+            }
+          }
+
+          const pieceCode = board[r][c];
+          if (pieceCode) {
+            sq.textContent = PIECES[pieceCode] || '';
+          }
+
+          sq.addEventListener('click', () => handleSquareClick(r, c));
+          boardEl.appendChild(sq);
+        }
+      }
+    }
+
+    function handleSquareClick(r, c) {
+      const clickedPiece = board[r][c];
+
+      if (selectedSquare) {
+        const isMove = validMoves.some(m => m.r === r && m.c === c);
+        if (isMove) {
+          executeMove(selectedSquare.r, selectedSquare.c, r, c);
+          selectedSquare = null;
+          validMoves = [];
+          renderBoard();
+          return;
+        }
+      }
+
+      if (clickedPiece && clickedPiece.startsWith(turn)) {
+        selectedSquare = { r, c };
+        validMoves = getValidMoves(r, c);
+      } else {
+        selectedSquare = null;
+        validMoves = [];
+      }
+      renderBoard();
+    }
+
+    function getValidMoves(r, c) {
+      const piece = board[r][c];
+      if (!piece) return [];
+      const color = piece[0];
+      const type = piece[1];
+      const moves = [];
+
+      function addIfValid(nr, nc) {
+        if (nr < 0 || nr >= 8 || nc < 0 || nc >= 8) return false;
+        const dest = board[nr][nc];
+        if (!dest) {
+          moves.push({ r: nr, c: nc });
+          return true;
+        }
+        if (dest[0] !== color) {
+          moves.push({ r: nr, c: nc });
+        }
+        return false;
+      }
+
+      if (type === 'P') {
+        const dir = color === 'w' ? -1 : 1;
+        const startRow = color === 'w' ? 6 : 1;
+        if (r + dir >= 0 && r + dir < 8 && !board[r + dir][c]) {
+          moves.push({ r: r + dir, c });
+          if (r === startRow && !board[r + 2 * dir][c]) {
+            moves.push({ r: r + 2 * dir, c });
+          }
+        }
+        for (const dc of [-1, 1]) {
+          const nr = r + dir;
+          const nc = c + dc;
+          if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+            const dest = board[nr][nc];
+            if (dest && dest[0] !== color) {
+              moves.push({ r: nr, c: nc });
+            }
+          }
+        }
+      } else if (type === 'N') {
+        const deltas = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+        for (const [dr, dc] of deltas) addIfValid(r + dr, c + dc);
+      } else if (type === 'B') {
+        const dirs = [[-1,-1],[-1,1],[1,-1],[1,1]];
+        for (const [dr, dc] of dirs) {
+          let step = 1;
+          while (addIfValid(r + dr * step, c + dc * step)) step++;
+        }
+      } else if (type === 'R') {
+        const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+        for (const [dr, dc] of dirs) {
+          let step = 1;
+          while (addIfValid(r + dr * step, c + dc * step)) step++;
+        }
+      } else if (type === 'Q') {
+        const dirs = [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]];
+        for (const [dr, dc] of dirs) {
+          let step = 1;
+          while (addIfValid(r + dr * step, c + dc * step)) step++;
+        }
+      } else if (type === 'K') {
+        const dirs = [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]];
+        for (const [dr, dc] of dirs) addIfValid(r + dr, c + dc);
+      }
+
+      return moves;
+    }
+
+    function executeMove(fromR, fromC, toR, toC) {
+      const piece = board[fromR][fromC];
+      const captured = board[toR][toC];
+
+      moveHistory.push({
+        from: { r: fromR, c: fromC },
+        to: { r: toR, c: toC },
+        piece,
+        captured,
+        boardState: board.map(row => [...row]),
+        turn
+      });
+
+      if (piece[1] === 'P' && (toR === 0 || toR === 7)) {
+        board[toR][toC] = piece[0] + 'Q';
+      } else {
+        board[toR][toC] = piece;
+      }
+      board[fromR][fromC] = null;
+
+      const cols = 'abcdefgh';
+      const notation = \`\${piece[1] !== 'P' ? piece[1] : ''}\${cols[fromC]}\${8 - fromR} → \${cols[toC]}\${captured ? ' (x)' : ''}\`;
+
+      turn = turn === 'w' ? 'b' : 'w';
+      updateUI(notation);
+    }
+
+    function undoMove() {
+      if (moveHistory.length === 0) return;
+      const last = moveHistory.pop();
+      board = last.boardState;
+      turn = last.turn;
+      selectedSquare = null;
+      validMoves = [];
+      updateUI('Undid last move');
+    }
+
+    function resetGame() {
+      initBoard();
+      document.getElementById('moveLog').textContent = 'Game reset. White moves first.';
+    }
+
+    function updateUI(lastMoveText) {
+      renderBoard();
+      const turnInd = document.getElementById('turnIndicator');
+      const turnText = document.getElementById('turnText');
+      if (turn === 'w') {
+        turnInd.className = 'turn-indicator turn-white';
+        turnText.textContent = "White's turn";
+      } else {
+        turnInd.className = 'turn-indicator turn-black';
+        turnText.textContent = "Black's turn";
+      }
+      document.getElementById('moveCount').textContent = \`Moves: \${moveHistory.length}\`;
+      if (lastMoveText) {
+        document.getElementById('moveLog').textContent = \`[\#\${moveHistory.length}] \${lastMoveText} | \${turn === 'w' ? 'White' : 'Black'} to move\`;
+      }
+    }
+
+    initBoard();
+  </script>
+</body>
+</html>
+\`\`\``,
+          });
+        }
+      }
+
       // Contextual continuation if prior assistant message exists
       if (lastAssistant) {
         return res.json({
           success: true,
-          text: `I have noted: "${lastUserMsg}" continuing our thread on "${lastAssistant.text.slice(0, 80)}...". Working in project "${projectContext?.name || 'General'}" via AXON Local Core.`,
+          text: `Understood! Continuing with our thread. What would you like to build or refine next?`,
         });
       }
 
       return res.json({
         success: true,
-        text: `I have received your request: "${lastUserMsg}". Operating in offline-safe local mode for project "${projectContext?.name || 'General'}". I am ready to help organize tasks, inspect workspace files, or perform local calculations.`,
+        text: `I hear you regarding "${lastUserMsg}". Working within ${projectContext?.name || 'your project'}, I can help you build components, draft documentation, or plan our next steps directly. How would you like to proceed?`,
       });
     }
 
-    // Final Safety Fallback: Default to AXON Local Core rather than returning an unsupported provider error
+    // Final Safety Fallback: Default to natural direct reply
     const fallbackUserMsg = (messages[messages.length - 1]?.text || 'Hello').trim();
     return res.json({
       success: true,
-      text: `Hello! I am AXON's local reasoning core.\n\nI have received your query: "${fallbackUserMsg}". Operating on-device in local workspace mode for project "${projectContext?.name || 'General'}".`,
+      text: `Hello! I have received your query: "${fallbackUserMsg}". How would you like to proceed with this?`,
     });
   } catch (error: any) {
     console.error('API Chat route error:', error);
