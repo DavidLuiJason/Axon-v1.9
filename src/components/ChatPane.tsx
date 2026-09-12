@@ -32,6 +32,78 @@ import { ModelSelectorModal } from './ModelSelectorModal';
 import { ChatShortcutBar } from './ChatShortcutBar';
 import { isAccountInCooldown, getRemainingCooldownString } from '../lib/aiConfig';
 import { resolveMessageButtonColor, getContrastRatio } from '../lib/colorContrast';
+import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
+
+const ChatMarkdown: React.FC<{ content: string; isAxon: boolean }> = React.memo(({ content, isAxon }) => {
+  return (
+    <div className={`chat-markdown break-words text-sm leading-relaxed ${isAxon ? 'text-neutral-100' : 'text-neutral-950'}`}>
+      <ReactMarkdown
+        remarkPlugins={[remarkBreaks]}
+        components={{
+          p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+          em: ({ children }) => <em className="italic">{children}</em>,
+          h1: ({ children }) => <h1 className="text-base font-bold mb-1.5 mt-2.5 first:mt-0 leading-snug">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-sm font-bold mb-1 mt-2 first:mt-0 leading-snug">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-xs font-bold mb-1 mt-1.5 first:mt-0 tracking-wide uppercase">{children}</h3>,
+          ul: ({ children }) => <ul className="list-disc list-outside pl-4 mb-2 last:mb-0 space-y-1">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal list-outside pl-4 mb-2 last:mb-0 space-y-1">{children}</ol>,
+          li: ({ children }) => <li className="leading-relaxed pl-0.5">{children}</li>,
+          code: ({ children, ...props }) => (
+            <code
+              className={`px-1.5 py-0.5 rounded text-xs font-mono font-medium ${
+                isAxon
+                  ? 'bg-white/10 text-sky-300 border border-white/15'
+                  : 'bg-black/10 text-neutral-900 border border-black/15'
+              }`}
+              {...props}
+            >
+              {children}
+            </code>
+          ),
+          pre: ({ children }) => (
+            <pre
+              className={`p-2.5 my-2 rounded-lg text-xs font-mono overflow-x-auto border [&>code]:bg-transparent [&>code]:p-0 [&>code]:border-0 [&>code]:text-inherit ${
+                isAxon
+                  ? 'bg-neutral-950 text-neutral-200 border-neutral-800'
+                  : 'bg-neutral-100 text-neutral-900 border-neutral-200'
+              }`}
+            >
+              {children}
+            </pre>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote
+              className={`border-l-2 pl-3 my-2 italic ${
+                isAxon ? 'border-neutral-700 text-neutral-300' : 'border-neutral-400 text-neutral-700'
+              }`}
+            >
+              {children}
+            </blockquote>
+          ),
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`underline underline-offset-2 hover:opacity-80 transition-opacity ${
+                isAxon ? 'text-sky-400' : 'text-blue-600'
+              }`}
+            >
+              {children}
+            </a>
+          ),
+          hr: () => (
+            <hr className={`my-2 border-t ${isAxon ? 'border-neutral-800' : 'border-neutral-200'}`} />
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+});
 
 export const ChatPane: React.FC = () => {
   const {
@@ -101,7 +173,7 @@ export const ChatPane: React.FC = () => {
   const isCooldownActive = isAccountInCooldown(activeAccount);
   const cooldownString = getRemainingCooldownString(activeAccount);
 
-  const functionColors = theme.functionColors || {};
+  const functionColors: any = theme.functionColors || {};
   const micRecordingColor = functionColors.micRecordingColor || '#ef4444';
 
   // Auto-scroll to bottom of messages
@@ -786,7 +858,7 @@ export const ChatPane: React.FC = () => {
                     );
                   })()}
 
-                  <p className="whitespace-pre-wrap break-words">{messageText}</p>
+                  <ChatMarkdown content={messageText} isAxon={isAxon} />
 
                   {/* Conditional View Result Button: Only appears right after a code build/run actually happened */}
                   {hasBuildRunResult && (
